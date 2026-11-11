@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Skill Gap Analyzer</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #f4f6fb; margin: 0; padding: 20px; color: #1f2937; }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 4px 18px rgba(0,0,0,.07); margin-bottom: 18px; }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  h2 { margin-top: 0; font-size: 1.15rem; }
+  h3 { margin: 22px 0 8px; font-size: 1rem; }
+  label { font-weight: 600; display: block; margin: 14px 0 6px; }
+  input, select, textarea { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; font-family: inherit; }
+  textarea { min-height: 150px; resize: vertical; }
+  button { padding: 10px 20px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-size: .95rem; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  button.ghost { background: #e5e7eb; color: #111827; }
+  button.small { padding: 6px 12px; font-size: .85rem; margin-top: 8px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .or { text-align: center; color: #6b7280; margin: 10px 0 0; }
+  .score { font-size: 3rem; font-weight: 700; }
+  .bar { height: 14px; background: #e5e7eb; border-radius: 7px; overflow: hidden; }
+  .bar > div { height: 100%; background: #16a34a; width: 0; transition: width .6s; }
+  .chips span { display: inline-block; padding: 5px 12px; margin: 4px 6px 4px 0; border-radius: 999px; font-size: .9rem; }
+  .ok span { background: #dcfce7; color: #166534; }
+  .no span { background: #fee2e2; color: #991b1b; }
+  .error { color: #b91c1c; margin-top: 10px; min-height: 1em; }
+  .hidden { display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb; }
+  .bullet { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .bullet .issue { color: #b45309; font-size: .88rem; margin-top: 4px; }
+  .sugg { background: #eff6ff; border-radius: 8px; padding: 8px 10px; margin-top: 8px; font-size: .92rem; }
+  a { color: #2563eb; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- LOGIN / REGISTER -->
+  <div id="authCard" class="card">
+    <h1>Resume Skill Gap Analyzer</h1>
+    <p>Log in to analyze your resume against a target role.</p>
+    <div id="nameRow" class="hidden">
+      <label for="name">Name</label>
+      <input id="name" placeholder="Your name">
+    </div>
+    <label for="email">Email</label>
+    <input id="email" type="email" placeholder="you@example.com">
+    <label for="password">Password (6+ characters)</label>
+    <input id="password" type="password">
+    <div class="row">
+      <button id="authBtn" onclick="submitAuth()">Login</button>
+      <button class="ghost" onclick="toggleMode()" id="toggleBtn">Create an account</button>
+    </div>
+    <div id="authError" class="error"></div>
+  </div>
+
+  <!-- APP -->
+  <div id="appCard" class="hidden">
+    <div class="top">
+      <div><h1>Resume Skill Gap Analyzer</h1><span id="hello"></span></div>
+      <button class="ghost" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="card">
+      <h2>Analyze your resume</h2>
+      <label for="role">Target role</label>
+      <select id="role"></select>
+
+      <label for="file">Upload resume (PDF)</label>
+      <input type="file" id="file" accept="application/pdf">
+      <p class="or">or paste your resume text</p>
+      <textarea id="text" placeholder="Paste resume text here..."></textarea>
+
+      <div class="row"><button onclick="analyze()">Analyze</button></div>
+      <div id="error" class="error"></div>
+    </div>
+
+    <div id="result" class="card hidden">
+      <div class="score"><span id="score">0</span>/100</div>
+      <div class="bar"><div id="fill"></div></div>
+
+      <h3>Skills you have</h3>
+      <div id="matched" class="chips ok"></div>
+
+      <h3>Skills to learn</h3>
+      <div id="missing" class="chips no"></div>
+
+      <h3>Learning plan</h3>
+      <table>
+        <thead><tr><th>Week</th><th>Skill</th><th>Days</th><th>Learn</th></tr></thead>
+        <tbody id="plan"></tbody>
+      </table>
+
+      <h3>Resume tips</h3>
+      <ul id="tips"></ul>
+
+      <h3>Weak bullet points</h3>
+      <div id="bullets"></div>
+    </div>
+
+    <div class="card">
+      <h2>Your past analyses</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Role</th><th>Score</th></tr></thead>
+        <tbody id="history"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let registerMode = false;
+let currentRole = '';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const token = () => localStorage.getItem('token');
+
+function authHeaders(extra = {}) {
+  return { 'Authorization': 'Bearer ' + token(), ...extra };
+}
+
+/* ---------- auth ---------- */
+function toggleMode() {
+  registerMode = !registerMode;
+  $('nameRow').classList.toggle('hidden', !registerMode);
+  $('authBtn').textContent = registerMode ? 'Register' : 'Login';
+  $('toggleBtn').textContent = registerMode ? 'I have an account' : 'Create an account';
+  $('authError').textContent = '';
+}
+
+async function submitAuth() {
+  const body = { email: $('email').value, password: $('password').value };
+  if (registerMode) body.name = $('name').value;
+  const res = await fetch('/api/auth/' + (registerMode ? 'register' : 'login'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) { $('authError').textContent = data.error || 'Failed.'; return; }
+  localStorage.setItem('token', data.token);
+  localStorage.setItem('name', data.name);
+  showApp();
+}
+
+function logout() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('name');
+  $('appCard').classList.add('hidden');
+  $('authCard').classList.remove('hidden');
+}
+
+async function showApp() {
+  $('authCard').classList.add('hidden');
+  $('appCard').classList.remove('hidden');
+  $('hello').textContent = 'Hi, ' + (localStorage.getItem('name') || '');
+  await loadRoles();
+  loadHistory();
+}
+
+/* ---------- data ---------- */
+async function loadRoles() {
+  const roles = await (await fetch('/api/roles')).json();
+  $('role').innerHTML = roles.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+}
+
+async function loadHistory() {
+  const res = await fetch('/api/history', { headers: authHeaders() });
+  if (res.status === 401) { logout(); return; }
+  const rows = await res.json();
+  $('history').innerHTML = rows.length
+    ? rows.map(r => `<tr><td>${esc(new Date(r.createdAt).toLocaleString())}</td><td>${esc(r.roleName)}</td><td>${r.score}/100</td></tr>`).join('')
+    : '<tr><td colspan="3"><em>No analyses yet.</em></td></tr>';
+}
+
+async function analyze() {
+  $('error').textContent = '';
+  const role = $('role').value;
+  currentRole = role;
+  const file = $('file').files[0];
+  let res;
+  if (file) {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('role', role);
+    res = await fetch('/api/analyze-pdf', { method: 'POST', headers: authHeaders(), body: form });
+  } else {
+    res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ text: $('text').value, role })
+    });
+  }
+  if (res.status === 401) { logout(); return; }
+  const data = await res.json();
+  if (!res.ok) { $('error').textContent = data.error || 'Something went wrong.'; return; }
+  show(data);
+  loadHistory();
+}
+
+const chips = list => list.length ? list.map(s => `<span>${esc(s)}</span>`).join('') : '<em>None</em>';
+
+function show(d) {
+  $('result').classList.remove('hidden');
+  $('score').textContent = d.score;
+  $('fill').style.width = d.score + '%';
+  $('matched').innerHTML = chips(d.matched);
+  $('missing').innerHTML = chips(d.missing);
+  $('tips').innerHTML = d.tips.map(t => `<li>${esc(t)}</li>`).join('') || '<li>Looks good.</li>';
+
+  $('plan').innerHTML = d.plan.length
+    ? d.plan.map(p => `<tr><td>Week ${p.week}</td><td>${esc(p.skill)}</td><td>${p.days}</td>
+        <td><a href="${esc(p.link)}" target="_blank" rel="noopener">Tutorials</a></td></tr>`).join('')
+    : '<tr><td colspan="4"><em>No gaps found.</em></td></tr>';
+
+  $('bullets').innerHTML = d.weakBullets.length
+    ? d.weakBullets.map((b, i) => `
+        <div class="bullet">
+          <div>${esc(b.bullet)}</div>
+          <div class="issue">${esc(b.issue)}</div>
+          <button class="small" onclick="improve(${i})">Improve this bullet</button>
+          <div id="sugg${i}"></div>
+        </div>`).join('')
+    : '<em>No weak bullets detected.</em>';
+  window._bullets = d.weakBullets;
+}
+
+async function improve(i) {
+  const box = $('sugg' + i);
+  box.innerHTML = '<div class="sugg">Thinking...</div>';
+  const res = await fetch('/api/improve', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ bullet: window._bullets[i].bullet, role: currentRole })
+  });
+  if (res.status === 401) { logout(); return; }
+  const data = await res.json();
+  box.innerHTML = (data.suggestions || [data.error || 'No suggestion.'])
+    .map(s => `<div class="sugg">${esc(s)}</div>`).join('');
+}
+
+if (token()) showApp();
+</script>
+</body>
+</html>
